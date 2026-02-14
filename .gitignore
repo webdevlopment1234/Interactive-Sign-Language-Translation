@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+.DS_Store
+# User specific
+MP_Data/
+Logs/
+.venv/
+.qoder/
+static/images/
