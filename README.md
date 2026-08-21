@@ -1,620 +1,345 @@
-# Real-Time Hand Gesture Recognition System
+# 🤟 Real-Time Sign Language Recognition System
 
-A complete deep learning-based sign language recognition system that translates hand gestures into text in real-time using MediaPipe for hand detection and a CNN classifier for gesture recognition.
+A deep learning-powered sign language interpreter that translates ASL hand gestures into text in real time. MediaPipe Hands tracks your hand landmarks, a lightweight CNN classifies 28×28 grayscale crops of the detected hand, and a Flask + React web app streams the results live to your browser.
 
-## 🌟 Features
+![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)
+![TensorFlow](https://img.shields.io/badge/TensorFlow-2.10-FF6F00?logo=tensorflow&logoColor=white)
+![MediaPipe](https://img.shields.io/badge/MediaPipe-Hands-0097A7)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)
+![License](https://img.shields.io/badge/License-Academic-lightgrey)
 
-- **Real-time Gesture Recognition**: Live webcam processing with instant gesture-to-text translation
-- **MediaPipe Integration**: Google's MediaPipe Hands for accurate 21-point hand landmark detection
-- **CNN Classifier**: Classifies normalized 28x28 grayscale hand crops
-- **Web-based Interface**: Modern React frontend with Flask backend API
-- **Sentence Construction**: Builds complete sentences from consecutive gesture predictions
-- **Confidence Scoring**: Real-time accuracy percentage display for each prediction
-- **Visual Feedback**: On-screen landmarks, ROI box, and prediction overlay
-- **Responsive Design**: Works on various screen sizes with gradient UI design
+---
 
-## 📋 System Architecture
+## ✨ Features
+
+- **Real-time translation** — live MJPEG video stream with per-frame inference (<100 ms latency)
+- **MediaPipe Hands** — robust 21-point hand tracking with automatic bounding-box crop (15% padding)
+- **CNN classifier** — 29-class model trained on the ASL alphabet dataset (28×28 grayscale input)
+- **Full A–Z alphabet** — plus `del`, `space`, and `nothing` control tokens
+- **Stability filtering** — a gesture is only accepted after 10 consecutive identical predictions above a 60% confidence threshold
+- **Sentence builder** — confirmed gestures accumulate into a sentence (last 5 characters kept)
+- **Modern web UI** — React 19 + Tailwind CSS with live feed, confidence readout, learning section, and quiz mode
+- **Fully local** — all processing happens on-device; no cloud calls, no data leaves your machine
+
+## 🏗️ System Architecture
 
 ```
-┌─────────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────────┐
-│   Webcam Input  │ ──▶ │  MediaPipe   │ ──▶ │  Grayscale  │ ──▶ │     CNN      │
-│                 │     │   Hands      │     │  Extraction │     │   Model      │
-└─────────────────┘     └──────────────┘     └─────────────┘     └──────────────┘
-                                                                        │
-                                                                        ▼
-┌─────────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────────┐
-│  Display Result │ ◀── │   Sentence   │ ◀── │  Prediction │ ◀── │  Softmax     │
-│                 │     │  Builder     │     │  Filtering  │     │  Output      │
-└─────────────────┘     └──────────────┘     └─────────────┘     └──────────────┘
+┌──────────────┐    ┌───────────────────┐    ┌──────────────────────┐    ┌─────────────────┐
+│  Webcam Feed │ ─▶ │  MediaPipe Hands   │ ─▶ │ Landmark-based hand  │ ─▶ │ Grayscale 28×28 │
+│  (OpenCV)    │    │  landmark tracking │    │ bounding-box crop    │    │ preprocessing   │
+└──────────────┘    └───────────────────┘    └──────────────────────┘    └────────┬────────┘
+                                                                                 ▼
+┌──────────────┐    ┌───────────────────┐    ┌──────────────────────┐    ┌─────────────────┐
+│  React UI    │ ◀ │  Sentence builder  │ ◀ │ Stability filter      │ ◀ │ CNN softmax     │
+│  (MJPEG +    │    │  (last 5 chars)    │    │ (10 frames @ >0.60)  │    │ prediction      │
+│   polling)   │    └───────────────────┘    └──────────────────────┘    └─────────────────┘
+└──────────────┘
 ```
 
-## 🎯 Supported Gestures
+**Pipeline detail:** every frame, the ROI region (`frame[40:400, 0:300]`) is scanned by MediaPipe. If a hand is found, its landmark bounding box is extracted with padding, converted to grayscale, resized to 28×28, normalized to `[0, 1]`, and fed to the CNN. Predictions are only committed to the sentence when stable.
 
-The active CNN recognizes **24 labels** loaded from `model_cnn_labels.json`: A-I, K-Y, and no J class.
-- **Letters**: A, B, C
-- **Numbers**: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+## 🔤 Recognized Gestures (29 classes)
 
-## 🛠️ Technology Stack
+| Category | Labels |
+|----------|--------|
+| Letters | `A B C D E F G H I J K L M N O P Q R S T U V W X Y Z` |
+| Control | `del` · `space` · `nothing` |
+
+Labels are loaded dynamically from `model_cnn_labels.json` at startup — nothing is hardcoded, so retraining with new classes works out of the box.
+
+## 🛠️ Tech Stack
 
 ### Backend
-- **Python 3.8+**
-- **TensorFlow 2.10.0** - Deep learning framework
-- **Keras 2.10.0** - Neural network API
-- **MediaPipe 0.10.32** - Hand landmark detection
-- **OpenCV** - Computer vision operations
-- **Flask** - Web server framework
-- **Waitress** - Production WSGI server
-- **NumPy** - Numerical computations
-- **scikit-learn** - Machine learning utilities
+| Technology | Purpose |
+|------------|---------|
+| Python 3.8+ | Runtime |
+| TensorFlow / Keras 2.10 | CNN training & inference |
+| MediaPipe | Hand landmark detection |
+| OpenCV | Frame capture & image preprocessing |
+| Flask + Waitress | Web server (production WSGI) |
+| scikit-learn | Train/validation stratified splitting |
 
 ### Frontend
-- **React 19.2.0** - UI framework
-- **Vite** - Build tool and dev server
-- **Tailwind CSS** - Utility-first CSS framework
-- **Lucide React** - Icon library
+| Technology | Purpose |
+|------------|---------|
+| React 19 | UI framework |
+| Vite 7 | Dev server & build tooling |
+| Tailwind CSS 3 | Styling |
+| Lucide React | Icons |
 
 ## 📁 Project Structure
 
 ```
 4-yearfinalreview/
-├── app.py                      # Flask backend server with video streaming
-├── function.py                 # MediaPipe processing and feature extraction
-├── data.py                     # Data collection script for training data
-├── collectdata.py              # Webcam capture tool for dataset creation
-├── trainmodel.py               # LSTM model training script
-├── model.json                  # Saved model architecture
-├── model.h5                    # Trained model weights
-├── frontend/                   # React frontend application
-│   ├── src/
-│   │   ├── App.jsx            # Main React component
-│   │   ├── main.jsx           # Application entry point
-│   │   ├── index.css          # Global styles
-│   │   └── components/        # Reusable UI components
-│   │       ├── Navbar.jsx
-│   │       ├── Hero.jsx
-│   │       ├── Prediction.jsx  # Real-time prediction interface
-│   │       ├── Learning.jsx
-│   │       └── Quiz.jsx
-│   ├── public/
-│   ├── dist/                   # Production build output
-│   ├── package.json
-│   ├── vite.config.js
-│   └── tailwind.config.js
-├── Image/                      # Raw image dataset (collected via collectdata.py)
-│   ├── A/, B/, C/             # Letter gesture folders
-│   └── 0/, 1/, ..., 9/        # Number gesture folders
-├── MP_Data/                    # Processed MediaPipe landmark data
-│   └── [A-Z, 0-9]/            # NPY files with keypoints
-├── Logs/                       # TensorBoard training logs
-└── static/                     # Static assets
+├── app.py                  # Flask backend: video streaming, inference, REST API
+├── function.py             # MediaPipe detection & landmark drawing helpers
+├── trainmodel_cnn.py       # CNN training script (GPU required)
+├── model_cnn.h5            # Trained CNN weights
+├── model_cnn.json          # Model architecture
+├── model_cnn_labels.json   # Class index → label map (dynamic loading)
+├── static/
+│   └── archive (3)/        # ASL alphabet train/test image dataset
+│       ├── asl_alphabet_train/
+│       └── asl_alphabet_test/
+├── Logs/cnn/               # TensorBoard training logs
+└── frontend/
+    ├── src/
+    │   ├── App.jsx          # Layout & routing between sections
+    │   ├── main.jsx         # Entry point
+    │   ├── index.css        # Tailwind entry
+    │   └── components/
+    │       ├── Navbar.jsx       # Top navigation
+    │       ├── Hero.jsx         # Landing section
+    │       ├── Prediction.jsx   # Live camera feed + real-time output
+    │       ├── Learning.jsx     # Alphabet learning section
+    │       └── Quiz.jsx         # Practice quiz mode
+    ├── dist/                # Production build (served by Flask)
+    ├── vite.config.js       # Dev proxy → backend :5000
+    └── package.json
 ```
 
-## 🚀 Installation & Setup
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- **Python 3.8 or higher**
-- **Node.js 16+** (for frontend development)
-- **Webcam** with camera access
-- **Modern web browser** (Chrome, Firefox, Edge recommended)
+- **Python 3.8+**
+- **Node.js 16+**
+- **Webcam**
+- **NVIDIA GPU** *(only needed for training — inference runs fine on CPU)*
 
-### Step 1: Clone the Repository
+### 1. Clone & Set Up Python Environment
 
 ```bash
 git clone <repository-url>
 cd 4-yearfinalreview
-```
 
-### Step 2: Create Virtual Environment
-
-```bash
-# Create virtual environment
 python -m venv venv_new
-
-# Activate virtual environment
-# Windows:
-venv_new\Scripts\activate
-# Linux/Mac:
-source venv_new/bin/activate
+venv_new\Scripts\activate        # Windows
+# source venv_new/bin/activate   # Linux/macOS
 ```
 
-### Step 3: Install Python Dependencies
+### 2. Install Dependencies
 
 ```bash
-pip install tensorflow==2.10.0
-pip install keras==2.10.0
-pip install mediapipe==0.10.32
-pip install opencv-python
-pip install opencv-contrib-python
-pip install flask
-pip install waitress
-pip install numpy==1.24.3
-pip install scikit-learn
-pip install matplotlib
+pip install tensorflow==2.10.0 keras==2.10.0 mediapipe opencv-python flask waitress numpy scikit-learn
 ```
 
-### Step 4: Install Frontend Dependencies
+> ⚠️ **TensorFlow 2.10 is intentional** — it's the last native Windows build with GPU support. On Linux/macOS you may use a newer version.
+
+### 3. Build the Frontend
 
 ```bash
 cd frontend
 npm install
-```
-
-### Step 5: Verify Model Files
-
-Ensure you have the trained model files in the root directory:
-- `model_cnn.h5` - Trained CNN model
-- `model_cnn_labels.json` - Model output index-to-label map
-
-If not present, run the training script first (see Training section).
-
-## 🎮 Usage
-
-### Starting the Application
-
-#### Option 1: Run Backend Only (Development)
-
-```bash
-# From project root directory
-python app.py
-```
-
-The server will start at: **http://127.0.0.1:5000**
-
-#### Option 2: Run Frontend Development Server
-
-```bash
-# Terminal 1 - Start backend
-python app.py
-
-# Terminal 2 - Start frontend (in separate terminal)
-cd frontend
-npm run dev
-```
-
-Frontend will be available at: **http://localhost:5173**
-
-#### Option 3: Production Mode
-
-```bash
-# Build frontend first
-cd frontend
 npm run build
-
-# Then run backend (serves static files)
 cd ..
+```
+
+### 4. Verify Model Files
+
+Ensure these exist in the project root (included or produced by training):
+
+- `model_cnn.h5` — weights
+- `model_cnn.json` — architecture
+- `model_cnn_labels.json` — label map
+
+### 5. Run
+
+```bash
 python app.py
 ```
 
-### Using the Application
+Open **http://127.0.0.1:5000**, click **Start Prediction**, allow camera access, and sign away.
 
-1. **Access the Web Interface**: Open your browser and navigate to `http://127.0.0.1:5000`
+#### Development Mode (Hot Reload)
 
-2. **Navigate to Prediction Section**: Click on "Prediction" or "Start Detection"
+```bash
+# Terminal 1 — backend
+python app.py
 
-3. **Grant Camera Permissions**: Allow browser to access your webcam when prompted
-
-4. **Position Your Hand**: 
-   - Place your right hand in the blue rectangular detection zone
-   - Keep hand steady within the ROI (Region of Interest) box
-   - Ensure good lighting for optimal detection
-
-5. **Perform Gestures**: 
-   - Hold each gesture for 1-2 seconds
-   - The system requires 30 consecutive frames (≈1 second) for prediction
-   - Watch the confidence score update in real-time
-
-6. **View Results**: 
-   - Current gesture appears with confidence percentage
-   - Detected sentence builds at the top of the video feed
-   - Results update automatically as new gestures are recognized
-
-### Expected Output Format
-
-When a gesture is detected, you'll see:
-```
-Hand Gesture: A
-Accuracy: 95.3%
-Background: Dark/Indoor
-Detected Sentence: A B C 1 2 3
+# Terminal 2 — frontend dev server
+cd frontend && npm run dev
 ```
 
-## 🔧 API Endpoints
+Vite serves the UI at **http://localhost:5173** and proxies `/video_feed`, `/get_prediction`, `/api/*`, and `/static/*` to the backend automatically (see `vite.config.js`).
 
-The Flask backend exposes several REST API endpoints:
+### Using the App
+
+1. Click **Prediction** in the navbar → **Start Prediction**
+2. Place your right hand inside the orange ROI rectangle
+3. Hold each sign steady for 1–2 seconds
+4. Confirmed letters appear in the sentence bar; confidence updates live
+5. Use `del` / `space` signs while signing to edit the sentence
+
+## 🔌 API Reference
 
 | Endpoint | Method | Description | Response |
 |----------|--------|-------------|----------|
-| `/` | GET | Serve main HTML page | HTML content |
-| `/video_feed` | GET | Stream processed video with landmarks | Multipart JPEG stream |
-| `/get_prediction` | GET | Get current prediction results | JSON: `{sentence, accuracy, current_action, current_confidence}` |
-| `/api/reset` | POST | Reset detection state | JSON: `{status, message}` |
-| `/api/actions` | GET | List all supported gestures | JSON: Array of action names |
-| `/static/*` | GET | Serve static frontend assets | Static files |
-
-### Example API Usage
+| `/` | GET | Serves the built React app | HTML |
+| `/video_feed` | GET | Live annotated MJPEG stream | `multipart/x-mixed-replace` |
+| `/get_prediction` | GET | Current prediction state | `{sentence, accuracy, current_action, current_confidence}` |
+| `/api/reset` | POST | Clears sentence & state | `{status, message}` |
+| `/api/actions` | GET | Supported gesture labels | `["A", "B", ...]` |
 
 ```javascript
-// Get current prediction
-fetch('/get_prediction')
-  .then(res => res.json())
-  .then(data => {
-    console.log('Current gesture:', data.current_action);
-    console.log('Confidence:', data.current_confidence);
-    console.log('Sentence:', data.sentence);
-  });
+// Poll current state (the frontend does this every 500 ms)
+const res = await fetch('/get_prediction');
+const { sentence, accuracy, current_action } = await res.json();
 
 // Reset detection state
-fetch('/api/reset', { method: 'POST' })
-  .then(res => res.json())
-  .then(data => console.log('Reset complete'));
-
-// Get list of actions
-fetch('/api/actions')
-  .then(res => res.json())
-  .then(actions => console.log('Supported gestures:', actions));
+await fetch('/api/reset', { method: 'POST' });
 ```
 
-## 🧠 Model Architecture
+## 🧠 Model Details
 
-### LSTM Network Structure
+### Architecture (28×28 grayscale input)
 
 ```
-Layer Type          | Units | Activation    | Input Shape
---------------------|-------|---------------|------------------
-LSTM                | 64    | ReLU          | (30, 63)
-LSTM                | 128   | ReLU          | (30, 64)
-LSTM                | 64    | ReLU          | (30, 128)
-Dense               | 64    | ReLU          | (64,)
-Dense               | 32    | ReLU          | (64,)
-Dense (Output)      | 13    | Softmax       | (32,)
+Layer (type)              | Output Shape     | Notes
+--------------------------|------------------|-----------------------------
+Conv2D ×2 (64 filters)    | 28×28 → 14×14    | ReLU, same padding, BatchNorm
+MaxPooling2D + Dropout    | 14×14            | dropout 0.25
+Conv2D ×2 (128 filters)   | 14×14 → 7×7      | ReLU, same padding, BatchNorm
+MaxPooling2D + Dropout    | 7×7              | dropout 0.25
+Flatten → Dense(64)       | 64               | BatchNorm, dropout 0.5
+Dense(32)                 | 32               | ReLU
+Dense(num_classes)        | 29               | Softmax
 ```
 
-### Model Configuration
+### Training Configuration
 
-- **Optimizer**: Adam
-- **Loss Function**: Categorical Crossentropy
-- **Metrics**: Categorical Accuracy
-- **Training Epochs**: 200
-- **Batch Size**: Auto (default)
-- **Sequence Length**: 30 frames
-- **Feature Vector**: 63 values (21 landmarks × 3 coordinates)
+| Parameter | Value |
+|-----------|-------|
+| Optimizer | Adam (lr = 1e-3) |
+| Loss | Categorical crossentropy |
+| Epochs | 30 (EarlyStopping patience = 5) |
+| Batch size | 64 |
+| Validation split | 10% (stratified) |
+| LR schedule | ReduceLROnPlateau (factor 0.5, patience 3) |
+| Input size | 28×28×1 grayscale, normalized to [0, 1] |
+| Logs | TensorBoard → `Logs/cnn` |
 
-### Training Parameters
+> 🖥️ **Training strictly requires a GPU** — `trainmodel_cnn.py` exits if none is detected. On Windows use TensorFlow 2.10 + CUDA 11.2 + cuDNN 8.1, or WSL2.
 
-```python
-model.compile(
-    optimizer='Adam',
-    loss='categorical_crossentropy',
-    metrics=['categorical_accuracy']
-)
+### Retraining
 
-model.fit(
-    X_train, y_train,
-    epochs=200,
-    validation_data=(X_test, y_test),
-    callbacks=[TensorBoard(log_dir='Logs')]
-)
-```
-
-## 📊 Data Collection & Training
-
-### Collecting Training Data
-
-1. **Run Data Collection Script**:
+Place the ASL alphabet dataset at `static/archive (3)/asl_alphabet_train/asl_alphabet_train` (one subfolder per class), then:
 
 ```bash
-python collectdata.py
+python trainmodel_cnn.py
 ```
 
-2. **Capture Images**:
-   - Press keys 'a', 'b', 'c' for letters
-   - Press keys '0'-'9' for numbers
-   - Each press saves an image to the corresponding folder
-   - Collect 100+ images per gesture for best results
-
-3. **Process Images to Landmarks**:
+This regenerates `model_cnn.h5`, `model_cnn.json`, and `model_cnn_labels.json`. Monitor progress with:
 
 ```bash
-python data.py
-```
-
-This script:
-- Loads each captured image
-- Runs MediaPipe hand detection
-- Extracts 21 hand landmarks (x, y, z coordinates)
-- Saves normalized keypoints as `.npy` files
-
-### Training the Model
-
-```bash
-python trainmodel.py
-```
-
-The training script will:
-1. Load all processed landmark data from `MP_Data/`
-2. Create sequences of 30 frames
-3. Split data into training (95%) and testing (5%) sets
-4. Train the LSTM model for 200 epochs
-5. Save the trained model to `model.json` and `model.h5`
-6. Log training metrics to TensorBoard in `Logs/`
-
-### Monitoring Training
-
-```bash
-# Launch TensorBoard to visualize training progress
 tensorboard --logdir=Logs
 ```
 
-Then open: `http://localhost:6006`
+## ⚙️ Tunable Settings
 
-## ⚙️ Configuration
-
-### Detection Settings (in `app.py`)
-
-```python
-threshold = 0.6  # Confidence threshold for gesture acceptance
-MIRROR_DISPLAY = False  # Mirror the video display (not detection)
-```
-
-### MediaPipe Parameters (in `function.py`)
-
-```python
-mp_hands.Hands(
-    model_complexity=0,           # 0=fastest, 1=accurate
-    min_detection_confidence=0.5, # Minimum detection confidence
-    min_tracking_confidence=0.5   # Minimum tracking confidence
-)
-```
-
-### Model Hyperparameters
-
-Adjust in `trainmodel.py`:
-- Number of LSTM layers and units
-- Dense layer configuration
-- Learning rate (via optimizer)
-- Dropout for regularization
+| Setting | Location | Default | Effect |
+|---------|----------|---------|--------|
+| Confidence threshold | `app.py` → `threshold` | `0.6` | Minimum softmax score to accept a frame |
+| Stability window | `app.py` → `predictions[-10:]` | `10` frames | Consecutive matching predictions before commit |
+| Sentence length | `app.py` | `5` chars | Rolling sentence buffer |
+| JPEG quality | `app.py` | `80` | Stream quality vs bandwidth |
+| Mirror display | `app.py` → `MIRROR_DISPLAY` | `False` | Flip video horizontally |
+| Detection confidence | `function.py` usage in `app.py` | `0.5` | MediaPipe sensitivity |
+| Model complexity | `app.py` | `0` | `0` = fastest, `1` = more accurate |
 
 ## 🐛 Troubleshooting
 
-### Common Issues and Solutions
+<details>
+<summary><b>Camera could not be opened</b></summary>
 
-#### 1. Camera Not Opening
+Close other apps using the webcam, check OS camera permissions, or try a different USB port.
+</details>
 
-**Error**: `CRITICAL: Camera could not be opened`
+<details>
+<summary><b>Stuck on "Waiting..." (no hand detected)</b></summary>
 
-**Solutions**:
-- Check if another application is using the camera
-- Verify camera permissions in browser settings
-- Try a different USB port for external webcams
-- Update camera drivers
+Keep your hand fully inside the orange ROI box, improve lighting, and reduce background clutter.
+</details>
 
-#### 2. No Hand Detection
+<details>
+<summary><b>TensorFlow import errors</b></summary>
 
-**Symptoms**: Landmarks not appearing, always shows "Waiting..."
+Pin the supported stack:
 
-**Solutions**:
-- Ensure hand is fully visible in the ROI box
-- Improve lighting conditions
-- Move hand closer to camera
-- Reduce background clutter
-- Check if MediaPipe model file exists
-
-#### 3. Low Accuracy Predictions
-
-**Symptoms**: Confidence below 60%, inconsistent results
-
-**Solutions**:
-- Retrain model with more diverse dataset
-- Ensure consistent hand positioning during training
-- Increase sequence length for temporal context
-- Adjust confidence threshold in `app.py`
-
-#### 4. TensorFlow Import Errors
-
-**Error**: `AttributeError: module 'tensorflow' has no attribute 'config'`
-
-**Solution**: Use compatible versions:
 ```bash
-pip uninstall tensorflow
-pip install tensorflow==2.10.0
-pip install numpy==1.24.3
+pip uninstall tensorflow numpy -y
+pip install tensorflow==2.10.0 numpy
 ```
+</details>
 
-#### 5. MediaPipe API Errors
+<details>
+<summary><b>Port 5000 already in use</b></summary>
 
-**Error**: `AttributeError: module 'mediapipe' has no attribute 'solutions'`
-
-**Solution**: MediaPipe 0.10.32 uses new API structure. Ensure `function.py` imports correctly:
-```python
-import mediapipe as mp
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
-mp_hands = mp.solutions.hands
-```
-
-#### 6. Flask Server Won't Start
-
-**Error**: Port 5000 already in use
-
-**Solution**:
-```bash
-# Windows
+```powershell
 netstat -ano | findstr :5000
 taskkill /PID <PID> /F
-
-# Or change port in app.py
-serve(app, host='127.0.0.1', port=5001, threads=6)
 ```
 
-#### 7. Frontend Build Errors
+Or change the port in `app.py`: `serve(app, host='127.0.0.1', port=5001, threads=6)`
+</details>
 
-**Error**: Module not found or build fails
+<details>
+<summary><b>Frontend shows stale content after rebuild</b></summary>
 
-**Solution**:
-```bash
-cd frontend
-rm -rf node_modules package-lock.json
-npm install
-npm run build
-```
-
-### Performance Optimization
-
-#### For Slower Systems
-
-1. Reduce model complexity in `function.py`:
-```python
-mp_hands.Hands(model_complexity=0, ...)
-```
-
-2. Lower video quality in `app.py`:
-```python
-ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
-```
-
-3. Reduce prediction frequency in frontend
-
-#### For Better Accuracy
-
-1. Increase training data diversity
-2. Train for more epochs (300+)
-3. Use higher model complexity
-4. Implement data augmentation
-5. Add more gesture classes gradually
-
-## 🧪 Testing
-
-### Quick Test
-
-After installation, verify everything works:
+Rebuild and hard-refresh — the backend already disables static caching:
 
 ```bash
-# Test Python imports
-python -c "import tensorflow as tf; import mediapipe as mp; import cv2; print('All imports successful!')"
+cd frontend && npm run build
+```
+</details>
 
-# Test model loading
-python -c "from keras.models import model_from_json; m = model_from_json(open('model.json').read()); m.load_weights('model.h5'); print('Model loaded successfully!')"
+<details>
+<summary><b>Slow performance</b></summary>
 
-# Test MediaPipe
-python -c "from function import *; print('MediaPipe functions loaded!')"
+Lower JPEG quality (`cv2.IMWRITE_JPEG_QUALITY, 60`), keep `model_complexity=0`, or reduce the polling interval in `frontend/src/components/Prediction.jsx`.
+</details>
+
+## 🧪 Quick Sanity Checks
+
+```bash
+# Imports
+python -c "import tensorflow, mediapipe, cv2, flask; print('All imports OK')"
+
+# Model loads
+python -c "from tensorflow.keras.models import load_model; load_model('model_cnn.h5', compile=False); print('Model OK')"
+
+# Label map matches model output
+python -c "import json; m=json.load(open('model_cnn_labels.json')); print(len(m), 'classes')"
 ```
 
-### Unit Testing
+## 🔒 Privacy & Security
 
-Create test scripts to verify:
-- Camera accessibility
-- MediaPipe landmark detection
-- Model prediction functionality
-- API endpoint responses
-
-## 📈 Performance Metrics
-
-### Typical Performance
-
-- **Detection Speed**: ~30 FPS on modern hardware
-- **Prediction Latency**: <100ms per frame
-- **Model Size**: ~2.3 MB (compressed)
-- **Accuracy**: 95-98% on test set (varies by gesture)
-
-### Benchmarking
-
-Run performance tests:
-```python
-import time
-start = time.time()
-# Run prediction
-end = time.time()
-print(f"Inference time: {(end-start)*1000:.2f}ms")
-```
-
-## 🔒 Security Considerations
-
-- Camera access requires user permission
-- All processing happens locally (no cloud dependency)
-- No personal data is stored or transmitted
-- Flask server only accessible on localhost by default
-
-## 🤝 Contributing
-
-To contribute improvements:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-### Areas for Improvement
-
-- Add support for continuous sign language (full sentences)
-- Implement multi-hand detection
-- Add more gesture classes (full alphabet)
-- Optimize for mobile deployment
-- Create desktop application version
-- Add user authentication and profiles
-- Implement model retraining from collected data
-
-## 📄 License
-
-This project is created as a final year academic project. Please cite appropriately if used in research or publications.
-
-## 👥 Authors
-
-**Final Year Project** - Hand Gesture Recognition System
-
-## 🙏 Acknowledgments
-
-- **Google MediaPipe** - Hand landmark detection framework
-- **TensorFlow Team** - Deep learning framework
-- **React Team** - Frontend library
-- **Academic Advisors** - Guidance and support
-
-## 📞 Support
-
-For issues or questions:
-
-1. Check this README thoroughly
-2. Review the Troubleshooting section
-3. Check TensorBoard logs for training issues
-4. Examine Flask console output for runtime errors
-5. Use browser DevTools for frontend debugging
+- All inference runs locally — **no video ever leaves your machine**
+- Server binds to `127.0.0.1` only; nothing is exposed to the network
+- No telemetry, storage, or transmission of personal data
 
 ## 🗺️ Roadmap
 
-### Phase 1: Core Features ✅
-- [x] Single hand gesture recognition
-- [x] Real-time webcam integration
-- [x] Web-based interface
-- [x] Sentence construction
+- [x] Single-hand static gesture recognition
+- [x] Full A–Z alphabet with control tokens
+- [x] Web interface with live feedback
+- [x] Sentence construction with stability filtering
+- [ ] Dynamic/motion gesture recognition (two-handed signs)
+- [ ] Word-level recognition & auto-spacing
+- [ ] Text-to-speech voice feedback
+- [ ] Mobile-friendly layout & PWA support
+- [ ] ONNX / TensorFlow Lite export for edge deployment
 
-### Phase 2: Enhanced Features (Future)
-- [ ] Continuous sign language translation
-- [ ] Multi-hand detection
-- [ ] Voice feedback
-- [ ] Mobile app version
-- [ ] User customization interface
-- [ ] Cloud model serving
-- [ ] Historical data tracking
+## 🙏 Acknowledgments
 
-### Phase 3: Advanced Capabilities (Future)
-- [ ] Full ASL alphabet support
-- [ ] Dynamic gesture recognition
-- [ ] Two-way communication mode
-- [ ] Multi-language support
-- [ ] Accessibility features
-
-## 📚 Additional Resources
-
-- [MediaPipe Documentation](https://google.github.io/mediapipe/)
-- [TensorFlow Tutorials](https://www.tensorflow.org/tutorials)
-- [Keras API Reference](https://keras.io/api/)
-- [OpenCV Documentation](https://docs.opencv.org/)
-- [React Documentation](https://react.dev/)
-- [Flask Documentation](https://flask.palletsprojects.com/)
+- [Google MediaPipe](https://developers.google.com/mediapipe) — hand tracking
+- [TensorFlow / Keras](https://www.tensorflow.org/) — deep learning framework
+- [ASL Alphabet Dataset](https://www.kaggle.com/datasets/grassknoted/asl-alphabet) — training data
+- [React](https://react.dev/) & [Vite](https://vitejs.dev/) — frontend tooling
 
 ---
 
-**Last Updated**: March 2026  
-**Version**: 1.0.0  
-**Status**: Production Ready
+**Version:** 2.0.0 (CNN architecture) · **Status:** Production Ready · **Last Updated:** August 2026
+
+*Final year academic project — please cite appropriately if used in research.*
